@@ -12,20 +12,32 @@ const initSocket = require('./socket/socketHandler');
 const app = express();
 const server = http.createServer(app);
 
-// ── Socket.io ──────────────────────────────────────────────────
-const io = new Server(server, {
-  cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true,
+// ── CORS ───────────────────────────────────────────────────────
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.some(o => origin.startsWith(o))) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    }
   },
-});
+  credentials: true,
+};
+
+// ── Socket.io ──────────────────────────────────────────────────
+const io = new Server(server, { cors: corsOptions });
 initSocket(io);
 
 // ── Middleware ─────────────────────────────────────────────────
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
-}));
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -58,9 +70,8 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected');
-    server.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT}`);
-      console.log(`   Socket.io ready`);
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`✅ Server running on port ${PORT}`);
     });
   })
   .catch((err) => {
